@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"github.com/ValentinTorassa/autoconfine/internal/enforce"
 	"github.com/ValentinTorassa/autoconfine/internal/generate"
 	"github.com/ValentinTorassa/autoconfine/internal/learn"
+	"github.com/ValentinTorassa/autoconfine/internal/profile"
 )
 
 func main() {
@@ -26,6 +28,14 @@ func main() {
 		os.Exit(runGenerate(os.Args[2:]))
 	case "enforce":
 		os.Exit(runEnforce(os.Args[2:]))
+	case "summary":
+		os.Exit(runSummary(os.Args[2:]))
+	case "validate":
+		os.Exit(runValidate(os.Args[2:]))
+	case "compare":
+		os.Exit(runCompare(os.Args[2:]))
+	case "merge":
+		os.Exit(runMerge(os.Args[2:]))
 	case "version":
 		fmt.Println("autoconfine", config.Version)
 		os.Exit(0)
@@ -36,7 +46,7 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "Uso: autoconfine <learn|generate|enforce|version> [opciones]")
+	fmt.Fprintln(os.Stderr, "Uso: autoconfine <learn|generate|enforce|summary|validate|compare|merge|version> [opciones]")
 }
 
 func runLearn(args []string) int {
@@ -92,8 +102,8 @@ func runEnforce(args []string) int {
 	}
 
 	cfg := enforce.Config{
-		ProfilePath: *profile,
-		Audit:       *audit,
+		ProfilePath:   *profile,
+		Audit:         *audit,
 		DriftReporter: drift.NewJSONReporter(os.Stdout),
 	}
 
@@ -102,5 +112,107 @@ func runEnforce(args []string) int {
 		fmt.Fprintf(os.Stderr, "enforce: %v\n", err)
 		return 1
 	}
+	return 0
+}
+
+func runSummary(args []string) int {
+	fs := flag.NewFlagSet("summary", flag.ExitOnError)
+	defaultAllowed := fs.Int("default-allowed", 304, "syscalls permitidas por el perfil por defecto")
+	jsonOut := fs.String("json", "", "guardar análisis como JSON")
+	reportOut := fs.String("report", "", "guardar reporte markdown")
+	fs.Parse(args)
+
+	if fs.NArg() == 0 {
+		fmt.Fprintln(os.Stderr, "summary: se requiere ruta de traza")
+		return 1
+	}
+
+	stats, err := profile.AnalyzeTrace(fs.Arg(0), *defaultAllowed)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "summary: %v\n", err)
+		return 1
+	}
+
+	fmt.Printf("Syscalls únicas: %d\n", stats.GeneratedAllowed)
+	fmt.Printf("Reducción vs default (%d): %.2f%%\n", stats.DefaultAllowed, stats.ReductionPercent)
+
+	if *jsonOut != "" {
+		if err := profile.WriteReportJSON(stats, *jsonOut); err != nil {
+			fmt.Fprintf(os.Stderr, "summary json: %v\n", err)
+			return 1
+		}
+	}
+	if *reportOut != "" {
+		if err := profile.WriteReport(stats, fs.Arg(0), *reportOut); err != nil {
+			fmt.Fprintf(os.Stderr, "summary report: %v\n", err)
+			return 1
+		}
+	}
+	return 0
+}
+
+func runValidate(args []string) int {
+	fs := flag.NewFlagSet("validate", flag.ExitOnError)
+	fs.Parse(args)
+
+	if fs.NArg() == 0 {
+		fmt.Fprintln(os.Stderr, "validate: se requiere ruta del perfil seccomp")
+		return 1
+	}
+
+	if err := profile.ValidateProfile(fs.Arg(0)); err != nil {
+		fmt.Fprintf(os.Stderr, "validate: %v\n", err)
+		return 1
+	}
+	fmt.Println("Perfil válido")
+	return 0
+}
+
+func runCompare(args []string) int {
+	fs := flag.NewFlagSet("compare", flag.ExitOnError)
+	profiles := fs.Bool("profiles", false, "comparar como perfiles seccomp en lugar de trazas")
+	fs.Parse(args)
+
+	if fs.NArg() < 2 {
+		fmt.Fprintln(os.Stderr, "compare: se requieren dos rutas")
+		return 1
+	}
+
+	var res *profile.CompareResult
+	var err error
+	if *profiles {
+		res, err = profile.CompareProfiles(fs.Arg(0), fs.Arg(1))
+	} else {
+		res, err = profile.CompareTraces(fs.Arg(0), fs.Arg(1))
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "compare: %v\n", err)
+		return 1
+	}
+
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(res); err != nil {
+		fmt.Fprintf(os.Stderr, "compare: %v\n", err)
+		return 1
+	}
+	return 0
+}
+
+func runMerge(args []string) int {
+	fs := flag.NewFlagSet("merge", flag.ExitOnError)
+	out := fs.String("out", "merged.trace.jsonl", "ruta de salida")
+	fs.Parse(args)
+
+	if fs.NArg() < 2 {
+		fmt.Fprintln(os.Stderr, "merge: se requieren al menos dos trazas")
+		return 1
+	}
+
+	if err := profile.MergeTraces(fs.Args(), *out); err != nil {
+		fmt.Fprintf(os.Stderr, "merge: %v\n", err)
+		return 1
+	}
+	fmt.Printf("Traza combinada guardada en %s\n", *out)
 	return 0
 }

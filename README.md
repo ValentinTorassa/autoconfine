@@ -16,6 +16,15 @@
 | Aplicar | `autoconfine enforce` | Ejecuta el contenedor con Podman aplicando el perfil derivado. |
 | Auditar | `autoconfine enforce --audit` | Alerta cuando aparece una syscall fuera del perfil aprendido (drift detection). |
 
+## Nuevas funciones de análisis
+
+| Comando | Uso | Descripción |
+|---|---|---|
+| `autoconfine summary trace.jsonl` | `autoconfine summary nginx.trace.jsonl --report report.md` | Estadísticas de reducción y reporte markdown. |
+| `autoconfine validate` | `autoconfine validate nginx-seccomp.json` | Valida que el JSON seccomp sea parseable y tenga estructura mínima. |
+| `autoconfine compare` | `autoconfine compare a.trace.jsonl b.trace.jsonl` | Diferencias entre dos trazas. Usar `--profiles` para comparar perfiles. |
+| `autoconfine merge` | `autoconfine merge t1.jsonl t2.jsonl --out merged.jsonl` | Combina trazas de varias fases de aprendizaje. |
+
 ## Instalación
 
 ```bash
