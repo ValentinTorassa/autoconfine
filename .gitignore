@@ -1,0 +1,30 @@
+# Binarios
+/autoconfine
+*.exe
+*.dll
+*.so
+*.a
+
+# Go
+/vendor/
+/go.sum
+*.test
+*.out
+coverage.html
+coverage.out
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Artefactos de aprendizaje
+*.trace.jsonl
+*.seccomp.json
+*.log
+
+# eBPF
+*.o
+*.bpf.o
